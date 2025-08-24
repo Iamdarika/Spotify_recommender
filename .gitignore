@@ -1,4 +1,8 @@
 data/*.csv
+# keep big datasets local, but allow tiny samples for demos
+!data/sample_*.csv
+!data/README.md
+
 *.o
 *.exe
 *.out
