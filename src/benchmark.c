@@ -1,3 +1,6 @@
+// src/benchmark.c
+// mpicc -O2 -fopenmp src/benchmark.c -o bench_mpi   (example standalone build)
+// mpirun -np 4 ./bench_mpi
 #include <stdio.h>
 #include <stdlib.h>
 #include <mpi.h>
