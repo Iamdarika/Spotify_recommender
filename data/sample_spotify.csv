@@ -1,0 +1,9 @@
+track_id,track_name,genre,tempo,valence,energy,danceability,acousticness,popularity,year,duration_ms
+T1,Sunrise Pop,pop,120.0,0.72,0.65,0.78,0.10,55,2019,210000
+T2,Night Drive,edm,128.0,0.45,0.90,0.82,0.02,68,2021,198000
+T3,Deep Calm,ambient,70.0,0.20,0.15,0.30,0.85,40,2016,240000
+T4,Rain Walk,indie,95.0,0.55,0.40,0.60,0.40,50,2018,230000
+T5,Gold Lights,hiphop,140.0,0.60,0.85,0.88,0.05,72,2022,185000
+T6,Blue Echo,rock,110.0,0.35,0.70,0.55,0.08,60,2017,205000
+T7,Soft Bloom,acoustic,85.0,0.80,0.20,0.45,0.90,38,2015,250000
+T8,City Pulse,edm,126.0,0.50,0.95,0.84,0.01,77,2023,192000
