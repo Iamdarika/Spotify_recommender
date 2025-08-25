@@ -12,7 +12,7 @@ $(TARGET): main.o $(OBJ)
 	$(NVCC) main.o $(OBJ) $(CU) -o $(TARGET)
 
 main.o: main.c
-	$(CC) $(CFLAGS) -c main.c -o main.o
+	$(CC) $(CFLAGS) -c src/main.c -o main.o
 
 src/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
