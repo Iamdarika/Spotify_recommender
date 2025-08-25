@@ -2,10 +2,10 @@
 
 Team B7:
 
-- Darika N S (OpenMP + Integration)
-- Arunavarshini N (Preprocessing with OpenMP)
-- Jonnala Thanishka (MPI Benchmarking)
-- Killana Pavan Kumar (CUDA Collaborative Filtering)
+- Darika N S (OpenMP + Integration) - CB.AI.U4AID23110
+- Arunavarshini N (Preprocessing with OpenMP) - CB.AI.U4AID23158
+- Jonnala Thanishka (MPI Benchmarking) - CB.AI.U4AID23117
+- Killana Pavan Kumar (CUDA Collaborative Filtering) - CB.AI.U4AID23120
 
 ### Description
 A high-performance music recommendation engine built on:
