@@ -20,10 +20,24 @@ struct Song {
         }
     }
 
-    void printInfo() const {
-        std::cout << "Track: " << track_name 
-                  << " | Artist: " << artists 
-                  << " | Genre ID: " << genre_id << std::endl;
+    // Write Song data to a binary stream
+    void serialize(std::ostream& out) const {
+        size_t len;
+
+        len = track_id.size();
+        out.write(reinterpret_cast<const char*>(&len), sizeof(len));
+        out.write(track_id.c_str(), len);
+
+        len = track_name.size();
+        out.write(reinterpret_cast<const char*>(&len), sizeof(len));
+        out.write(track_name.c_str(), len);
+
+        len = artists.size();
+        out.write(reinterpret_cast<const char*>(&len), sizeof(len));
+        out.write(artists.c_str(), len);
+
+        out.write(reinterpret_cast<const char*>(&genre_id), sizeof(genre_id));
+        out.write(reinterpret_cast<const char*>(features), FEATURE_COUNT * sizeof(float));
     }
 };
 
