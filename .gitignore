@@ -1,8 +1,61 @@
-data/*.csv
-# keep big datasets local, but allow tiny samples for demos
-!data/sample_*.csv
-!data/README.md
-
+# Compiled Object files
 *.o
+*.obj
+*.ko
+*.elf
+
+# Executables
+recommender
 *.exe
 *.out
+*.app
+*.i*86
+*.x86_64
+
+# Preprocessed data files
+songs_data.bin
+*.bin
+
+# CSV datasets (usually large)
+*.csv
+dataset/
+data/
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# CUDA generated files
+*.fatbin
+*.cubin
+*.ptx
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CMake (if used later)
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile.bak
+
+# Backup files
+*.bak
+*.tmp
+*.log
+
+# Core dumps
+core
+core.*
+
+# Profiling data
+*.nvprof
+*.nvvp
+*.qdrep
