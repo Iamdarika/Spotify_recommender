@@ -28,7 +28,7 @@ A GPU-accelerated content-based music recommendation system built with C++, CUDA
 
 1. **Clone or navigate to the project directory:**
    ```bash
-   cd /home/mnand/Projects/SpotifyRecommendation
+   cd /home/dariks/Projects/SpotifyRecommendation
    ```
 
 2. **Verify CUDA installation:**
