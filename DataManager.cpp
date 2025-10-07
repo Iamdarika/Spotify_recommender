@@ -156,6 +156,97 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     
     std::cout << "Parsing and validating songs..." << std::endl;
     
+    // Parse songs in parallel
+    #pragma omp parallel
+    {
+        std::map<std::string, int> localGenreMap;
+        
+        #pragma omp for schedule(dynamic, 1000)
+        for (size_t i = 0; i < lines.size(); ++i) {
+            std::vector<std::string> fields = parseCSVLine(lines[i]);
+            
+            if (fields.size() < headers.size()) {
+                continue; // Skip incomplete rows
+            }
+            
+            Song song;
+            bool valid = true;
+            
+            // Extract metadata
+            song.track_id = fields[columnMap["track_id"]];
+            song.track_name = fields[columnMap["track_name"]];
+            song.artists = fields[columnMap["artists"]];
+            
+            if (song.track_id.empty() || song.track_name.empty()) {
+                valid = false;
+            }
+            
+            // Extract and validate numerical features
+            for (size_t j = 0; j < featureCols.size() && valid; ++j) {
+                std::string colName = featureCols[j];
+                std::string valueStr = fields[columnMap[colName]];
+                
+                // Handle special cases: key and mode
+                if (colName == "key") {
+                    int keyNum = keyToNumber(valueStr);
+                    if (keyNum < 0) {
+                        // Try as number
+                        if (isValidNumber(valueStr)) {
+                            rawFeatures[i][j] = std::stof(valueStr);
+                        } else {
+                            valid = false;
+                            break;
+                        }
+                    } else {
+                        rawFeatures[i][j] = static_cast<float>(keyNum);
+                    }
+                } else if (colName == "mode") {
+                    int modeNum = modeToNumber(valueStr);
+                    if (modeNum < 0) {
+                        // Try as number
+                        if (isValidNumber(valueStr)) {
+                            rawFeatures[i][j] = std::stof(valueStr);
+                        } else {
+                            valid = false;
+                            break;
+                        }
+                    } else {
+                        rawFeatures[i][j] = static_cast<float>(modeNum);
+                    }
+                } else {
+                    // Regular numerical feature
+                    if (!isValidNumber(valueStr)) {
+                        valid = false;
+                        break;
+                    }
+                    rawFeatures[i][j] = std::stof(valueStr);
+                }
+            }
+            
+            // Extract genre
+            std::string genre = fields[columnMap["track_genre"]];
+            if (genre.empty()) {
+                valid = false;
+            } else {
+                localGenreMap[genre] = 0; // Will assign IDs later
+            }
+            
+            if (valid) {
+                songs[i] = song;
+                validSongs[i] = true;
+                
+                // Temporarily store genre name in track_id field of invalid songs
+                // (we'll fix this after merging genre maps)
+                #pragma omp critical
+                {
+                    if (genreToId.find(genre) == genreToId.end()) {
+                        genreToId[genre] = nextGenreId++;
+                    }
+                    songs[i].genre_id = genreToId[genre];
+                }
+            }
+        }
+    }
     
     // Count valid songs
     int validCount = 0;
@@ -185,6 +276,83 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     }
     
     std::cout << "Normalizing features..." << std::endl;
+    
+    // Normalize features in parallel
+    #pragma omp parallel for schedule(dynamic, 1000)
+    for (size_t i = 0; i < lines.size(); ++i) {
+        if (validSongs[i]) {
+            for (int j = 0; j < FEATURE_COUNT - 1; ++j) {
+                float range = maxVals[j] - minVals[j];
+                if (range > 0.0001f) {
+                    songs[i].features[j] = (rawFeatures[i][j] - minVals[j]) / range;
+                } else {
+                    songs[i].features[j] = 0.5f; // Default for constant features
+                }
+            }
+            // Normalize genre_id to [0, 1] range
+            songs[i].features[FEATURE_COUNT - 1] = static_cast<float>(songs[i].genre_id) / std::max(1, static_cast<int>(genreToId.size()) - 1);
+        }
+    }
+    
+    // Compact valid songs
+    std::vector<Song> finalSongs;
+    finalSongs.reserve(validCount);
+    for (size_t i = 0; i < songs.size(); ++i) {
+        if (validSongs[i]) {
+            finalSongs.push_back(songs[i]);
+        }
+    }
+    
+    std::cout << "Writing binary data to: " << outputPath << std::endl;
+    
+    // Write to binary file
+    std::ofstream outFile(outputPath, std::ios::binary);
+    if (!outFile.is_open()) {
+        std::cerr << "Error: Could not create output file: " << outputPath << std::endl;
+        return false;
+    }
+    
+    // Write header: number of songs
+    size_t numSongs = finalSongs.size();
+    outFile.write(reinterpret_cast<const char*>(&numSongs), sizeof(numSongs));
+    
+    // Write genre mapping
+    size_t numGenres = genreToId.size();
+    outFile.write(reinterpret_cast<const char*>(&numGenres), sizeof(numGenres));
+    
+    for (const auto& pair : genreToId) {
+        int genreId = pair.second;
+        std::string genreName = pair.first;
+        size_t len = genreName.size();
+        
+        outFile.write(reinterpret_cast<const char*>(&genreId), sizeof(genreId));
+        outFile.write(reinterpret_cast<const char*>(&len), sizeof(len));
+        outFile.write(genreName.c_str(), len);
+    }
+    
+    // Write songs
+    for (const auto& song : finalSongs) {
+        song.serialize(outFile);
+    }
+    
+    outFile.close();
+    
+    std::cout << "Preprocessing complete! Saved " << numSongs << " songs to binary file." << std::endl;
+    std::cout << "\nGenre Mapping:" << std::endl;
+    
+    // Create sorted genre list for display
+    std::vector<std::pair<int, std::string>> sortedGenres;
+    for (const auto& pair : genreToId) {
+        sortedGenres.push_back({pair.second, pair.first});
+    }
+    std::sort(sortedGenres.begin(), sortedGenres.end());
+    
+    for (const auto& pair : sortedGenres) {
+        std::cout << "  ID " << pair.first << ": " << pair.second << std::endl;
+    }
+    
+    return true;
+}
 
 bool DataManager::loadData(const std::string& binaryPath, 
                           std::vector<Song>& songs,
