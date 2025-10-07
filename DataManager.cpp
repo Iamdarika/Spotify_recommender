@@ -1,4 +1,5 @@
 // Handles preprocessing of raw CSV song data into normalized binary format and loading it for use.
+// Reads CSV song data, validates and normalizes features, converts genres/keys to numeric IDs, and saves/loads in binary format for fast access.
 
 #include "DataManager.h"
 #include <fstream>
