@@ -2,10 +2,10 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
-#include <map>
+#include <algorithm>
+#include <omp.h>
 #include <cmath>
 #include <limits>
-#include <algorithm>
 
 // Remove UTF-8 BOM if present
 std::string removeBOM(const std::string& str) {
@@ -88,44 +88,148 @@ std::vector<std::string> DataManager::parseCSVLine(const std::string& line) {
 }
 
 bool DataManager::preprocessData(const std::string& csvPath, const std::string& outputPath) {
+    std::cout << "Starting data preprocessing from: " << csvPath << std::endl;
+    
     std::ifstream csvFile(csvPath);
     if (!csvFile.is_open()) {
-        std::cerr << "Error: Could not open CSV file." << std::endl;
+        std::cerr << "Error: Could not open CSV file: " << csvPath << std::endl;
         return false;
     }
-
+    
+    // Read header line
     std::string headerLine;
-    std::getline(csvFile, headerLine);
-    auto headers = parseCSVLine(headerLine);
-
-    std::vector<std::string> required = {
-        "track_id", "track_name", "artists", "danceability", "energy",
-        "key", "loudness", "mode", "speechiness", "acousticness",
-        "instrumentalness", "liveness", "valence", "tempo", "track_genre"
-    };
-
+    if (!std::getline(csvFile, headerLine)) {
+        std::cerr << "Error: Empty CSV file" << std::endl;
+        return false;
+    }
+    
+    // Remove BOM if present
+    headerLine = removeBOM(headerLine);
+    
+    // Parse header to find column indices
+    std::vector<std::string> headers = parseCSVLine(headerLine);
     std::map<std::string, int> columnMap;
-    for (size_t i = 0; i < headers.size(); ++i) columnMap[headers[i]] = i;
-
-    for (auto& c : required)
-        if (columnMap.find(c) == columnMap.end()) {
-            std::cerr << "Missing column: " << c << std::endl;
+    for (size_t i = 0; i < headers.size(); ++i) {
+        columnMap[headers[i]] = i;
+    }
+    
+    // Verify required columns exist
+    std::vector<std::string> requiredCols = {
+        "track_id", "track_name", "artists", "danceability", "energy", "key",
+        "loudness", "mode", "speechiness", "acousticness", "instrumentalness",
+        "liveness", "valence", "tempo", "track_genre"
+    };
+    
+    for (const auto& col : requiredCols) {
+        if (columnMap.find(col) == columnMap.end()) {
+            std::cerr << "Error: Required column '" << col << "' not found in CSV" << std::endl;
             return false;
         }
-
-    std::vector<Song> songs;
+    }
+    
+    // Read all lines from CSV
+    std::vector<std::string> lines;
     std::string line;
     while (std::getline(csvFile, line)) {
-        auto fields = parseCSVLine(line);
-        if (fields.size() < headers.size()) continue;
-
-        Song song;
-        song.track_id = fields[columnMap["track_id"]];
-        song.track_name = fields[columnMap["track_name"]];
-        song.artists = fields[columnMap["artists"]];
-        songs.push_back(song);
+        if (!line.empty()) {
+            lines.push_back(line);
+        }
     }
+    csvFile.close();
+    
+    std::cout << "Read " << lines.size() << " data rows from CSV" << std::endl;
+    
+    // Create temporary storage for parsed songs
+    std::vector<Song> songs(lines.size());
+    std::vector<bool> validSongs(lines.size(), false);
+    std::map<std::string, int> genreToId;
+    int nextGenreId = 0;
+    
+    // Store raw feature values for normalization
+    std::vector<std::vector<float>> rawFeatures(lines.size(), std::vector<float>(FEATURE_COUNT - 1, 0.0f));
+    
+    // Feature column names (excluding genre which is categorical)
+    std::vector<std::string> featureCols = {
+        "danceability", "energy", "key", "loudness", "mode", "speechiness",
+        "acousticness", "instrumentalness", "liveness", "valence", "tempo"
+    };
+    
+    std::cout << "Parsing and validating songs..." << std::endl;
+    
+    
+    // Count valid songs
+    int validCount = 0;
+    for (bool v : validSongs) {
+        if (v) validCount++;
+    }
+    
+    std::cout << "Valid songs: " << validCount << " out of " << lines.size() << std::endl;
+    std::cout << "Unique genres: " << genreToId.size() << std::endl;
+    
+    if (validCount == 0) {
+        std::cerr << "Error: No valid songs found in CSV" << std::endl;
+        return false;
+    }
+    
+    // Calculate min/max for each feature for normalization
+    std::vector<float> minVals(FEATURE_COUNT - 1, std::numeric_limits<float>::max());
+    std::vector<float> maxVals(FEATURE_COUNT - 1, std::numeric_limits<float>::lowest());
+    
+    for (size_t i = 0; i < lines.size(); ++i) {
+        if (validSongs[i]) {
+            for (int j = 0; j < FEATURE_COUNT - 1; ++j) {
+                minVals[j] = std::min(minVals[j], rawFeatures[i][j]);
+                maxVals[j] = std::max(maxVals[j], rawFeatures[i][j]);
+            }
+        }
+    }
+    
+    std::cout << "Normalizing features..." << std::endl;
 
-    std::cout << "Parsed " << songs.size() << " songs." << std::endl;
+bool DataManager::loadData(const std::string& binaryPath, 
+                          std::vector<Song>& songs,
+                          std::map<int, std::string>& genreMap) {
+    std::cout << "Loading preprocessed data from: " << binaryPath << std::endl;
+    
+    std::ifstream inFile(binaryPath, std::ios::binary);
+    if (!inFile.is_open()) {
+        std::cerr << "Error: Could not open binary file: " << binaryPath << std::endl;
+        return false;
+    }
+    
+    // Read number of songs
+    size_t numSongs;
+    inFile.read(reinterpret_cast<char*>(&numSongs), sizeof(numSongs));
+    
+    // Read genre mapping
+    size_t numGenres;
+    inFile.read(reinterpret_cast<char*>(&numGenres), sizeof(numGenres));
+    
+    genreMap.clear();
+    for (size_t i = 0; i < numGenres; ++i) {
+        int genreId;
+        size_t len;
+        
+        inFile.read(reinterpret_cast<char*>(&genreId), sizeof(genreId));
+        inFile.read(reinterpret_cast<char*>(&len), sizeof(len));
+        
+        std::string genreName(len, '\0');
+        inFile.read(&genreName[0], len);
+        
+        genreMap[genreId] = genreName;
+    }
+    
+    // Read songs
+    songs.clear();
+    songs.resize(numSongs);
+    
+    for (size_t i = 0; i < numSongs; ++i) {
+        songs[i].deserialize(inFile);
+    }
+    
+    inFile.close();
+    
+    std::cout << "Loaded " << numSongs << " songs and " << numGenres << " genres." << std::endl;
+    
     return true;
 }
