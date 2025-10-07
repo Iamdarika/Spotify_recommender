@@ -20,7 +20,7 @@ std::string removeBOM(const std::string& str) {
 
 // Convert musical key notation to number (0-11)
 int keyToNumber(const std::string& key) {
-    std::string upperKey = key;
+    std::string upperKey = key; // make a copy of the input string.
     std::transform(upperKey.begin(), upperKey.end(), upperKey.begin(), ::toupper);
     
     if (upperKey == "C") return 0;
@@ -50,18 +50,19 @@ int modeToNumber(const std::string& mode) {
     return -1; // Invalid mode
 }
 
+// Trim leading and trailing whitespace
 std::string DataManager::trim(const std::string& str) {
     size_t first = str.find_first_not_of(" \t\r\n");
     if (first == std::string::npos) return "";
     size_t last = str.find_last_not_of(" \t\r\n");
     return str.substr(first, last - first + 1);
 }
-
+// Check if a string is a valid number
 bool DataManager::isValidNumber(const std::string& str) {
     if (str.empty()) return false;
     char* end;
     strtod(str.c_str(), &end);
-    return end != str.c_str() && *end == '\0';
+    return end != str.c_str() && *end == '\0'; //at least some characters were converted and entire string was processed
 }
 
 std::vector<std::string> DataManager::parseCSVLine(const std::string& line) {
@@ -118,8 +119,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
         "loudness", "mode", "speechiness", "acousticness", "instrumentalness",
         "liveness", "valence", "tempo", "track_genre"
     };
-// Verify that all the required columns are present in the CSV header.
-// For each column name in 'requiredCols', check if it exists in 'columnMap'.
+    
     for (const auto& col : requiredCols) {
         if (columnMap.find(col) == columnMap.end()) {
             std::cerr << "Error: Required column '" << col << "' not found in CSV" << std::endl;
@@ -276,7 +276,9 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     }
     
     std::cout << "Normalizing features..." << std::endl;
-    
+
+
+    //OpenMP
     // Normalize features in parallel
     #pragma omp parallel for schedule(dynamic, 1000)
     for (size_t i = 0; i < lines.size(); ++i) {
@@ -357,19 +359,13 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
 bool DataManager::loadData(const std::string& binaryPath, 
                           std::vector<Song>& songs,
                           std::map<int, std::string>& genreMap) {
-    // Print the path of the binary file being loaded
     std::cout << "Loading preprocessed data from: " << binaryPath << std::endl;
     
-    // Open the binary file for reading in binary mode
     std::ifstream inFile(binaryPath, std::ios::binary);
-    
-    // Check if the file failed to open
     if (!inFile.is_open()) {
-        // Print an error message if the file couldn't be opened
         std::cerr << "Error: Could not open binary file: " << binaryPath << std::endl;
-        return false; // Exit function indicating failure
+        return false;
     }
-
     
     // Read number of songs
     size_t numSongs;
