@@ -1,21 +1,34 @@
 #include "DataManager.h"
-#include <fstream>
-#include <iostream>
+#include <sstream>
+#include <algorithm>
 
-bool DataManager::preprocessData(const std::string& csvPath, const std::string& outputPath) {
-    std::cout << "Preprocessing data from: " << csvPath << std::endl;
-    return true;
+std::string DataManager::trim(const std::string& str) {
+    size_t first = str.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return "";
+    size_t last = str.find_last_not_of(" \t\r\n");
+    return str.substr(first, last - first + 1);
 }
 
-bool DataManager::loadData(const std::string& binaryPath,
-                          std::vector<Song>& songs,
-                          std::map<int, std::string>& genreMap) {
-    std::cout << "Loading data from: " << binaryPath << std::endl;
-    return true;
+bool DataManager::isValidNumber(const std::string& str) {
+    if (str.empty()) return false;
+    char* end;
+    strtod(str.c_str(), &end);
+    return end != str.c_str() && *end == '\0';
 }
 
-// Placeholder helper methods
-std::vector<std::string> DataManager::parseCSVLine(const std::string& line) { return {}; }
-std::string DataManager::trim(const std::string& str) { return str; }
-bool DataManager::isValidNumber(const std::string& str) { return true; }
+std::vector<std::string> DataManager::parseCSVLine(const std::string& line) {
+    std::vector<std::string> result;
+    std::string current;
+    bool inQuotes = false;
+
+    for (char c : line) {
+        if (c == '"') inQuotes = !inQuotes;
+        else if (c == ',' && !inQuotes) {
+            result.push_back(trim(current));
+            current.clear();
+        } else current += c;
+    }
+    result.push_back(trim(current));
+    return result;
+}
 
