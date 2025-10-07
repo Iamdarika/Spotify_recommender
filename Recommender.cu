@@ -44,7 +44,7 @@
 
 // CUDA kernel to compute norms of feature vectors
 #ifndef DISABLE_CUDA
-_global_ void computeNormsKernel(const float* features, float* norms, int numSongs, int featureCount) {
+__global__ void computeNormsKernel(const float* features, float* norms, int numSongs, int featureCount) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     
     if (idx < numSongs) {
@@ -58,7 +58,7 @@ _global_ void computeNormsKernel(const float* features, float* norms, int numSon
 }
 
 // CUDA kernel to normalize similarity scores by norms (final step of cosine similarity)
-_global_ void normalizeSimilaritiesKernel(float* similarities, const float* norms, 
+__global__ void normalizeSimilaritiesKernel(float* similarities, const float* norms, 
                                             float queryNorm, int numSongs) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     
