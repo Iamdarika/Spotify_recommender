@@ -15,6 +15,17 @@ public:
     static bool loadData(const std::string& binaryPath,
                         std::vector<Song>& songs,
                         std::map<int, std::string>& genreMap);
+
+private:
+    // Helper to parse a CSV line considering quoted fields
+    static std::vector<std::string> parseCSVLine(const std::string& line);
+
+    // Helper to trim whitespace from strings
+    static std::string trim(const std::string& str);
+
+    // Helper to check if string is a valid number
+    static bool isValidNumber(const std::string& str);
 };
 
 #endif // DATAMANAGER_H
+
