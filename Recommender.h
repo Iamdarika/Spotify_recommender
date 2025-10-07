@@ -72,6 +72,11 @@ public:
     bool isInitialized() const { return initialized; }
     
     /**
+     * Returns true if GPU path successfully initialized; otherwise CPU fallback is used.
+     */
+    bool isGPUEnabled() const { return gpuEnabled; }
+    
+    /**
      * Get the number of songs in the database.
      */
     int getSongCount() const { return numSongs; }
@@ -90,6 +95,15 @@ private:
     
     // cuBLAS handle
     void* cublasHandle;  // Using void* to avoid including cublas in header
+    
+    // Dynamic library handle for cuBLAS (dlopen)
+    void* cublasLibHandle;
+    
+    // Whether GPU path is active
+    bool gpuEnabled;
+    
+    // CPU fallback similarity computation
+    void calculateSimilaritiesCPU(int queryIndex, float* similarities) const;
     
     /**
      * Calculate cosine similarities on GPU using cuBLAS.
@@ -116,4 +130,3 @@ private:
 };
 
 #endif // RECOMMENDER_H
-

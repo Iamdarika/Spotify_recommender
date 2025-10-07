@@ -428,4 +428,8 @@ Distribute dataset across multiple GPUs:
 
 **Document Version:** 1.0  
 **Last Updated:** October 2025  
-**Author:** GitHub Copilot
+**Author:** 
+- Darika NS CB.AI.U4AID23110
+- Jonnala Thanishka CB.AI.U4AID23117
+- Killana Pavan Kumar CB.AI.U4AID23120
+- Aruna Varshini N CB.AI.U4AID23158

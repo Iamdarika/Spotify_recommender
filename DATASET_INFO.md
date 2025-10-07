@@ -1,10 +1,10 @@
 # Sample Dataset for Testing
 
-This is a template for your music dataset. Replace this with your actual Spotify or music dataset CSV file.
+This is a template for my music dataset. 
 
 ## Required Columns
 
-Your CSV must have these exact column names:
+our CSV  have these column names:
 - track_id
 - track_name
 - artists
@@ -21,7 +21,7 @@ Your CSV must have these exact column names:
 - tempo
 - track_genre
 
-## Where to Get Real Data
+##from Where we Get Data
 
 ### 1. Kaggle Datasets (Free)
 - **Spotify Dataset 1921-2020**: https://www.kaggle.com/yamaerenay/spotify-dataset-19212020
@@ -61,7 +61,7 @@ head -n 101 large_dataset.csv > test_dataset.csv
 ./recommender --song "Gen Z" -n 5
 ```
 
-## Notes
+## Note
 
 - Ensure there are no missing values in numerical columns
 - The preprocessor will skip invalid rows automatically

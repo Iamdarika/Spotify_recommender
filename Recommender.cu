@@ -16,7 +16,7 @@
     do { \
         cudaError_t error = call; \
         if (error != cudaSuccess) { \
-            std::cerr << "CUDA error at " << _FILE_ << ":" << _LINE_ << " - " \
+            std::cerr << "CUDA error at " << __FILE__ << ":" << __LINE__ << " - " \
                       << cudaGetErrorString(error) << std::endl; \
             return false; \
         } \
@@ -30,7 +30,7 @@
     do { \
         cublasStatus_t status = call; \
         if (status != CUBLAS_STATUS_SUCCESS) { \
-            std::cerr << "cuBLAS error at " << _FILE_ << ":" << _LINE_ << " - Status: " << status << std::endl; \
+            std::cerr << "cuBLAS error at " << __FILE__ << ":" << __LINE__ << " - Status: " << status << std::endl; \
             if (status == CUBLAS_STATUS_NOT_INITIALIZED) std::cerr << "  CUBLAS_STATUS_NOT_INITIALIZED" << std::endl; \
             if (status == CUBLAS_STATUS_ALLOC_FAILED) std::cerr << "  CUBLAS_STATUS_ALLOC_FAILED" << std::endl; \
             if (status == CUBLAS_STATUS_INVALID_VALUE) std::cerr << "  CUBLAS_STATUS_INVALID_VALUE" << std::endl; \
@@ -44,7 +44,7 @@
 
 // CUDA kernel to compute norms of feature vectors
 #ifndef DISABLE_CUDA
-_global_ void computeNormsKernel(const float* features, float* norms, int numSongs, int featureCount) {
+__global__ void computeNormsKernel(const float* features, float* norms, int numSongs, int featureCount) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     
     if (idx < numSongs) {
@@ -58,7 +58,7 @@ _global_ void computeNormsKernel(const float* features, float* norms, int numSon
 }
 
 // CUDA kernel to normalize similarity scores by norms (final step of cosine similarity)
-_global_ void normalizeSimilaritiesKernel(float* similarities, const float* norms, 
+__global__ void normalizeSimilaritiesKernel(float* similarities, const float* norms, 
                                             float queryNorm, int numSongs) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     
@@ -178,3 +178,194 @@ bool Recommender::initialize(const std::vector<Song>& songs) {
     initialized = true;
     return true;
 }
+
+void Recommender::calculateSimilarities(int queryIndex, float* similarities) {
+    if (!initialized || queryIndex < 0 || queryIndex >= numSongs) {
+        std::cerr << "Error: Invalid query index or recommender not initialized" << std::endl;
+        return;
+    }
+    if (!gpuEnabled) {
+        calculateSimilaritiesCPU(queryIndex, similarities);
+        return;
+    }
+    
+    #ifndef DISABLE_CUDA
+    cublasHandle_t handle = static_cast<cublasHandle_t>(cublasHandle);
+    #endif
+    
+    // Copy query feature to device
+    float* queryFeatureHost = songDatabase[queryIndex].features;
+    cudaMemcpy(d_queryFeature, queryFeatureHost, 
+               FEATURE_COUNT * sizeof(float), cudaMemcpyHostToDevice);
+    
+    // Compute dot products using cuBLAS SGEMV
+    // similarities = features * queryFeature
+    // features is (numSongs x FEATURE_COUNT) matrix
+    // queryFeature is (FEATURE_COUNT x 1) vector
+    // result is (numSongs x 1) vector
+    
+    float alpha = 1.0f;
+    float beta = 0.0f;
+    
+    // cuBLAS uses column-major, but we can treat our row-major as transposed
+    // We want: d_similarities = d_features * d_queryFeature
+    // In column-major interpretation: d_similarities = d_features^T * d_queryFeature
+    // So we use SGEMV with transpose
+    #ifndef DISABLE_CUDA
+    cublasSgemv(handle, CUBLAS_OP_T,
+                FEATURE_COUNT, numSongs,
+                &alpha,
+                d_features, FEATURE_COUNT,
+                d_queryFeature, 1,
+                &beta,
+                d_similarities, 1);
+    #endif
+    
+    // Allocate device memory for norms
+    #ifndef DISABLE_CUDA
+    float* d_norms;
+    cudaMalloc(&d_norms, numSongs * sizeof(float));
+    
+    // Compute norms of all feature vectors
+    int blockSize = 256;
+    int numBlocks = (numSongs + blockSize - 1) / blockSize;
+    computeNormsKernel<<<numBlocks, blockSize>>>(d_features, d_norms, numSongs, FEATURE_COUNT);
+    
+    // Compute norm of query vector
+    float queryNorm = 0.0f;
+    for (int i = 0; i < FEATURE_COUNT; ++i) {
+        queryNorm += queryFeatureHost[i] * queryFeatureHost[i];
+    }
+    queryNorm = std::sqrt(queryNorm);
+    
+    // Normalize similarities to get cosine similarity
+    normalizeSimilaritiesKernel<<<numBlocks, blockSize>>>(d_similarities, d_norms, 
+                                                          queryNorm, numSongs);
+    
+    // Copy results back to host
+    cudaMemcpy(similarities, d_similarities, numSongs * sizeof(float), 
+               cudaMemcpyDeviceToHost);
+    
+    // Free temporary memory
+    cudaFree(d_norms);
+    #endif
+}
+
+void Recommender::calculateSimilaritiesCPU(int queryIndex, float* similarities) const {
+    const float* query = songDatabase[queryIndex].features;
+    // Pre-compute query norm
+    float queryNorm = 0.0f;
+    for (int j = 0; j < FEATURE_COUNT; ++j) queryNorm += query[j] * query[j];
+    queryNorm = std::sqrt(queryNorm);
+    for (int i = 0; i < numSongs; ++i) {
+        const float* feat = songDatabase[i].features;
+        float dot = 0.0f;
+        float norm = 0.0f;
+        for (int j = 0; j < FEATURE_COUNT; ++j) {
+            dot += query[j] * feat[j];
+            norm += feat[j] * feat[j];
+        }
+        norm = std::sqrt(norm) * queryNorm;
+        similarities[i] = (norm > 1e-8f) ? std::max(-1.0f, std::min(1.0f, dot / norm)) : 0.0f;
+    }
+}
+
+std::vector<int> Recommender::recommendByIndex(int songIndex, int topN) {
+    if (!initialized) {
+        std::cerr << "Error: Recommender not initialized" << std::endl;
+        return {};
+    }
+    
+    if (songIndex < 0 || songIndex >= numSongs) {
+        std::cerr << "Error: Invalid song index: " << songIndex << std::endl;
+        return {};
+    }
+    
+    // Allocate host memory for similarities
+    std::vector<float> similarities(numSongs);
+    
+    // Calculate similarities on GPU
+    calculateSimilarities(songIndex, similarities.data());
+    
+    // Use a min-heap to find top-N recommendations
+    std::priority_queue<Recommendation> heap;
+    
+    for (int i = 0; i < numSongs; ++i) {
+        if (i == songIndex) continue; // Skip the query song itself
+        
+        Recommendation rec(i, similarities[i]);
+        
+        if (heap.size() < static_cast<size_t>(topN)) {
+            heap.push(rec);
+        } else if (rec.similarity > heap.top().similarity) {
+            heap.pop();
+            heap.push(rec);
+        }
+    }
+    
+    // Extract results and reverse to get descending order
+    std::vector<int> results;
+    results.reserve(heap.size());
+    while (!heap.empty()) {
+        results.push_back(heap.top().songIndex);
+        heap.pop();
+    }
+    std::reverse(results.begin(), results.end());
+    
+    return results;
+}
+
+int Recommender::findSongByTrackId(const std::string& trackId) const {
+    for (int i = 0; i < numSongs; ++i) {
+        if (songDatabase[i].track_id == trackId) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+std::string Recommender::toLower(const std::string& str) {
+    std::string result = str;
+    std::transform(result.begin(), result.end(), result.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return result;
+}
+
+int Recommender::findSongByName(const std::string& trackName) const {
+    std::string lowerQuery = toLower(trackName);
+    
+    // First try exact match (case-insensitive)
+    for (int i = 0; i < numSongs; ++i) {
+        if (toLower(songDatabase[i].track_name) == lowerQuery) {
+            return i;
+        }
+    }
+    
+    // If no exact match, try substring match
+    for (int i = 0; i < numSongs; ++i) {
+        if (toLower(songDatabase[i].track_name).find(lowerQuery) != std::string::npos) {
+            return i;
+        }
+    }
+    
+    return -1;
+}
+
+std::vector<int> Recommender::recommend(const std::string& trackId, int topN) {
+    int index = findSongByTrackId(trackId);
+    if (index == -1) {
+        std::cerr << "Error: Song with track_id '" << trackId << "' not found" << std::endl;
+        return {};
+    }
+    return recommendByIndex(index, topN);
+}
+
+std::vector<int> Recommender::recommendByName(const std::string& trackName, int topN) {
+    int index = findSongByName(trackName);
+    if (index == -1) {
+        std::cerr << "Error: Song with name '" << trackName << "' not found" << std::endl;
+        return {};
+    }
+    return recommendByIndex(index, topN);
+}
+

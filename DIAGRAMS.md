@@ -423,5 +423,4 @@ CPU (Host)                         GPU (Device)
 
 ---
 
-**Diagrams Created:** October 5, 2025  
 **Purpose:** Visual understanding of system architecture and data flow
