@@ -1,4 +1,5 @@
 // Song: Represents a music track with metadata and normalized audio features, including serialization for binary storage.
+// Useful for efficiently storing, loading, and processing song data in memory or binary files for analysis and ML tasks.
 
 #ifndef SONG_H
 #define SONG_H
