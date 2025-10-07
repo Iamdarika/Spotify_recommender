@@ -1,3 +1,5 @@
+// Handles preprocessing of raw CSV song data into normalized binary format and loading it for use.
+
 #include "DataManager.h"
 #include <fstream>
 #include <sstream>
