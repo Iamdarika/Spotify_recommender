@@ -20,10 +20,44 @@ struct Song {
         }
     }
 
-    void printInfo() const {
-        std::cout << "Track: " << track_name 
-                  << " | Artist: " << artists 
-                  << " | Genre ID: " << genre_id << std::endl;
+    // Write Song data to a binary stream
+    void serialize(std::ostream& out) const {
+        size_t len;
+
+        len = track_id.size();
+        out.write(reinterpret_cast<const char*>(&len), sizeof(len));
+        out.write(track_id.c_str(), len);
+
+        len = track_name.size();
+        out.write(reinterpret_cast<const char*>(&len), sizeof(len));
+        out.write(track_name.c_str(), len);
+
+        len = artists.size();
+        out.write(reinterpret_cast<const char*>(&len), sizeof(len));
+        out.write(artists.c_str(), len);
+
+        out.write(reinterpret_cast<const char*>(&genre_id), sizeof(genre_id));
+        out.write(reinterpret_cast<const char*>(features), FEATURE_COUNT * sizeof(float));
+    }
+
+    // Read Song data from a binary stream
+    void deserialize(std::istream& in) {
+        size_t len;
+
+        in.read(reinterpret_cast<char*>(&len), sizeof(len));
+        track_id.resize(len);
+        in.read(&track_id[0], len);
+
+        in.read(reinterpret_cast<char*>(&len), sizeof(len));
+        track_name.resize(len);
+        in.read(&track_name[0], len);
+
+        in.read(reinterpret_cast<char*>(&len), sizeof(len));
+        artists.resize(len);
+        in.read(&artists[0], len);
+
+        in.read(reinterpret_cast<char*>(&genre_id), sizeof(genre_id));
+        in.read(reinterpret_cast<char*>(features), FEATURE_COUNT * sizeof(float));
     }
 };
 
