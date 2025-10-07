@@ -1,34 +1,22 @@
 #include "DataManager.h"
-#include <sstream>
-#include <algorithm>
+#include <fstream>
+#include <iostream>
+#include <map>
 
-std::string DataManager::trim(const std::string& str) {
-    size_t first = str.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos) return "";
-    size_t last = str.find_last_not_of(" \t\r\n");
-    return str.substr(first, last - first + 1);
-}
-
-bool DataManager::isValidNumber(const std::string& str) {
-    if (str.empty()) return false;
-    char* end;
-    strtod(str.c_str(), &end);
-    return end != str.c_str() && *end == '\0';
-}
-
-std::vector<std::string> DataManager::parseCSVLine(const std::string& line) {
-    std::vector<std::string> result;
-    std::string current;
-    bool inQuotes = false;
-
-    for (char c : line) {
-        if (c == '"') inQuotes = !inQuotes;
-        else if (c == ',' && !inQuotes) {
-            result.push_back(trim(current));
-            current.clear();
-        } else current += c;
+bool DataManager::preprocessData(const std::string& csvPath, const std::string& outputPath) {
+    std::ifstream csvFile(csvPath);
+    if (!csvFile.is_open()) {
+        std::cerr << "Error: Could not open CSV file: " << csvPath << std::endl;
+        return false;
     }
-    result.push_back(trim(current));
-    return result;
-}
 
+    std::string headerLine;
+    if (!std::getline(csvFile, headerLine)) {
+        std::cerr << "Error: Empty CSV file" << std::endl;
+        return false;
+    }
+
+    std::vector<std::string> headers = parseCSVLine(headerLine);
+    std::cout << "CSV Columns: " << headers.size() << std::endl;
+    return true;
+}
