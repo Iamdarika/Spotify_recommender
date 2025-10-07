@@ -276,7 +276,9 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     }
     
     std::cout << "Normalizing features..." << std::endl;
-    
+
+
+    //OpenMP
     // Normalize features in parallel
     #pragma omp parallel for schedule(dynamic, 1000)
     for (size_t i = 0; i < lines.size(); ++i) {
