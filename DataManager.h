@@ -1,3 +1,5 @@
+// DataManager: Handles preprocessing of CSV song data into normalized binary format and loading it back into memory.
+
 #ifndef DATAMANAGER_H
 #define DATAMANAGER_H
 
