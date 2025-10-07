@@ -7,7 +7,7 @@
 #include <cmath>
 #include <limits>
 
-// Remove UTF-8 BOM if present
+// Remove UTF-8 BOM if present (handles cases where CSV files contain BOM at start)
 std::string removeBOM(const std::string& str) {
     if (str.size() >= 3 && 
         static_cast<unsigned char>(str[0]) == 0xEF && 
@@ -18,7 +18,7 @@ std::string removeBOM(const std::string& str) {
     return str;
 }
 
-// Convert musical key notation to number (0-11)
+// Convert musical key (like C, D#, etc.) to a number (0–11)
 int keyToNumber(const std::string& key) {
     std::string upperKey = key;
     std::transform(upperKey.begin(), upperKey.end(), upperKey.begin(), ::toupper);
@@ -39,7 +39,7 @@ int keyToNumber(const std::string& key) {
     return -1; // Invalid key
 }
 
-// Convert mode string to number (Major=1, Minor=0)
+// Convert musical mode to a numeric value (Major = 1, Minor = 0)
 int modeToNumber(const std::string& mode) {
     std::string lowerMode = mode;
     std::transform(lowerMode.begin(), lowerMode.end(), lowerMode.begin(), ::tolower);
@@ -50,6 +50,7 @@ int modeToNumber(const std::string& mode) {
     return -1; // Invalid mode
 }
 
+// Trim leading and trailing whitespace
 std::string DataManager::trim(const std::string& str) {
     size_t first = str.find_first_not_of(" \t\r\n");
     if (first == std::string::npos) return "";
@@ -57,6 +58,7 @@ std::string DataManager::trim(const std::string& str) {
     return str.substr(first, last - first + 1);
 }
 
+// Check if a string is a valid number
 bool DataManager::isValidNumber(const std::string& str) {
     if (str.empty()) return false;
     char* end;
@@ -64,6 +66,7 @@ bool DataManager::isValidNumber(const std::string& str) {
     return end != str.c_str() && *end == '\0';
 }
 
+// Parse a CSV line into individual fields (handles quoted values)
 std::vector<std::string> DataManager::parseCSVLine(const std::string& line) {
     std::vector<std::string> result;
     std::string current;
@@ -73,7 +76,7 @@ std::vector<std::string> DataManager::parseCSVLine(const std::string& line) {
         char c = line[i];
         
         if (c == '"') {
-            inQuotes = !inQuotes;
+            inQuotes = !inQuotes; // Toggle quote mode
         } else if (c == ',' && !inQuotes) {
             result.push_back(trim(current));
             current.clear();
@@ -86,16 +89,18 @@ std::vector<std::string> DataManager::parseCSVLine(const std::string& line) {
     return result;
 }
 
+// Main preprocessing function — reads CSV, validates, normalizes, and saves to binary
 bool DataManager::preprocessData(const std::string& csvPath, const std::string& outputPath) {
     std::cout << "Starting data preprocessing from: " << csvPath << std::endl;
     
+    // Open CSV file
     std::ifstream csvFile(csvPath);
     if (!csvFile.is_open()) {
         std::cerr << "Error: Could not open CSV file: " << csvPath << std::endl;
         return false;
     }
     
-    // Read header line
+    // Read header line (column names)
     std::string headerLine;
     if (!std::getline(csvFile, headerLine)) {
         std::cerr << "Error: Empty CSV file" << std::endl;
@@ -105,14 +110,14 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     // Remove BOM if present
     headerLine = removeBOM(headerLine);
     
-    // Parse header to find column indices
+    // Parse header and map each column name to its index
     std::vector<std::string> headers = parseCSVLine(headerLine);
     std::map<std::string, int> columnMap;
     for (size_t i = 0; i < headers.size(); ++i) {
         columnMap[headers[i]] = i;
     }
     
-    // Verify required columns exist
+    // Verify that all required columns are present
     std::vector<std::string> requiredCols = {
         "track_id", "track_name", "artists", "danceability", "energy", "key",
         "loudness", "mode", "speechiness", "acousticness", "instrumentalness",
@@ -126,7 +131,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
         }
     }
     
-    // Read all lines from CSV
+    // Read all data rows
     std::vector<std::string> lines;
     std::string line;
     while (std::getline(csvFile, line)) {
@@ -138,16 +143,16 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     
     std::cout << "Read " << lines.size() << " data rows from CSV" << std::endl;
     
-    // Create temporary storage for parsed songs
+    // Prepare containers
     std::vector<Song> songs(lines.size());
     std::vector<bool> validSongs(lines.size(), false);
     std::map<std::string, int> genreToId;
     int nextGenreId = 0;
     
-    // Store raw feature values for normalization
+    // Raw features (for min-max normalization later)
     std::vector<std::vector<float>> rawFeatures(lines.size(), std::vector<float>(FEATURE_COUNT - 1, 0.0f));
     
-    // Feature column names (excluding genre which is categorical)
+    // Feature columns (excluding genre)
     std::vector<std::string> featureCols = {
         "danceability", "energy", "key", "loudness", "mode", "speechiness",
         "acousticness", "instrumentalness", "liveness", "valence", "tempo"
@@ -155,7 +160,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     
     std::cout << "Parsing and validating songs..." << std::endl;
     
-    // Parse songs in parallel
+    // Parallel parsing using OpenMP
     #pragma omp parallel
     {
         std::map<std::string, int> localGenreMap;
@@ -171,7 +176,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
             Song song;
             bool valid = true;
             
-            // Extract metadata
+            // Extract basic metadata
             song.track_id = fields[columnMap["track_id"]];
             song.track_name = fields[columnMap["track_name"]];
             song.artists = fields[columnMap["artists"]];
@@ -180,16 +185,15 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
                 valid = false;
             }
             
-            // Extract and validate numerical features
+            // Extract and validate features
             for (size_t j = 0; j < featureCols.size() && valid; ++j) {
                 std::string colName = featureCols[j];
                 std::string valueStr = fields[columnMap[colName]];
                 
-                // Handle special cases: key and mode
+                // Handle key and mode separately
                 if (colName == "key") {
                     int keyNum = keyToNumber(valueStr);
                     if (keyNum < 0) {
-                        // Try as number
                         if (isValidNumber(valueStr)) {
                             rawFeatures[i][j] = std::stof(valueStr);
                         } else {
@@ -202,7 +206,6 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
                 } else if (colName == "mode") {
                     int modeNum = modeToNumber(valueStr);
                     if (modeNum < 0) {
-                        // Try as number
                         if (isValidNumber(valueStr)) {
                             rawFeatures[i][j] = std::stof(valueStr);
                         } else {
@@ -213,7 +216,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
                         rawFeatures[i][j] = static_cast<float>(modeNum);
                     }
                 } else {
-                    // Regular numerical feature
+                    // Standard numerical features
                     if (!isValidNumber(valueStr)) {
                         valid = false;
                         break;
@@ -222,20 +225,19 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
                 }
             }
             
-            // Extract genre
+            // Extract genre and assign ID
             std::string genre = fields[columnMap["track_genre"]];
             if (genre.empty()) {
                 valid = false;
             } else {
-                localGenreMap[genre] = 0; // Will assign IDs later
+                localGenreMap[genre] = 0;
             }
             
+            // If valid song, update genre map and mark as valid
             if (valid) {
                 songs[i] = song;
                 validSongs[i] = true;
                 
-                // Temporarily store genre name in track_id field of invalid songs
-                // (we'll fix this after merging genre maps)
                 #pragma omp critical
                 {
                     if (genreToId.find(genre) == genreToId.end()) {
@@ -247,7 +249,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
         }
     }
     
-    // Count valid songs
+    // Count valid entries
     int validCount = 0;
     for (bool v : validSongs) {
         if (v) validCount++;
@@ -261,7 +263,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
         return false;
     }
     
-    // Calculate min/max for each feature for normalization
+    // Compute min and max values for normalization
     std::vector<float> minVals(FEATURE_COUNT - 1, std::numeric_limits<float>::max());
     std::vector<float> maxVals(FEATURE_COUNT - 1, std::numeric_limits<float>::lowest());
     
@@ -276,7 +278,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     
     std::cout << "Normalizing features..." << std::endl;
     
-    // Normalize features in parallel
+    // Normalize features (min-max scaling)
     #pragma omp parallel for schedule(dynamic, 1000)
     for (size_t i = 0; i < lines.size(); ++i) {
         if (validSongs[i]) {
@@ -285,15 +287,15 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
                 if (range > 0.0001f) {
                     songs[i].features[j] = (rawFeatures[i][j] - minVals[j]) / range;
                 } else {
-                    songs[i].features[j] = 0.5f; // Default for constant features
+                    songs[i].features[j] = 0.5f; // Default if feature is constant
                 }
             }
-            // Normalize genre_id to [0, 1] range
+            // Normalize genre_id to [0,1]
             songs[i].features[FEATURE_COUNT - 1] = static_cast<float>(songs[i].genre_id) / std::max(1, static_cast<int>(genreToId.size()) - 1);
         }
     }
     
-    // Compact valid songs
+    // Collect only valid songs
     std::vector<Song> finalSongs;
     finalSongs.reserve(validCount);
     for (size_t i = 0; i < songs.size(); ++i) {
@@ -304,21 +306,21 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     
     std::cout << "Writing binary data to: " << outputPath << std::endl;
     
-    // Write to binary file
+    // Open output binary file
     std::ofstream outFile(outputPath, std::ios::binary);
     if (!outFile.is_open()) {
         std::cerr << "Error: Could not create output file: " << outputPath << std::endl;
         return false;
     }
     
-    // Write header: number of songs
+    // Write metadata (number of songs and genres)
     size_t numSongs = finalSongs.size();
     outFile.write(reinterpret_cast<const char*>(&numSongs), sizeof(numSongs));
     
-    // Write genre mapping
     size_t numGenres = genreToId.size();
     outFile.write(reinterpret_cast<const char*>(&numGenres), sizeof(numGenres));
     
+    // Write genre ID-name pairs
     for (const auto& pair : genreToId) {
         int genreId = pair.second;
         std::string genreName = pair.first;
@@ -329,7 +331,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
         outFile.write(genreName.c_str(), len);
     }
     
-    // Write songs
+    // Write each song’s data
     for (const auto& song : finalSongs) {
         song.serialize(outFile);
     }
@@ -339,7 +341,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     std::cout << "Preprocessing complete! Saved " << numSongs << " songs to binary file." << std::endl;
     std::cout << "\nGenre Mapping:" << std::endl;
     
-    // Create sorted genre list for display
+    // Display genre mapping (sorted by ID)
     std::vector<std::pair<int, std::string>> sortedGenres;
     for (const auto& pair : genreToId) {
         sortedGenres.push_back({pair.second, pair.first});
@@ -353,6 +355,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     return true;
 }
 
+// Load preprocessed binary data
 bool DataManager::loadData(const std::string& binaryPath, 
                           std::vector<Song>& songs,
                           std::map<int, std::string>& genreMap) {
@@ -368,11 +371,12 @@ bool DataManager::loadData(const std::string& binaryPath,
     size_t numSongs;
     inFile.read(reinterpret_cast<char*>(&numSongs), sizeof(numSongs));
     
-    // Read genre mapping
+    // Read number of genres
     size_t numGenres;
     inFile.read(reinterpret_cast<char*>(&numGenres), sizeof(numGenres));
     
     genreMap.clear();
+    // Read genre mappings
     for (size_t i = 0; i < numGenres; ++i) {
         int genreId;
         size_t len;
@@ -386,7 +390,7 @@ bool DataManager::loadData(const std::string& binaryPath,
         genreMap[genreId] = genreName;
     }
     
-    // Read songs
+    // Read all songs from file
     songs.clear();
     songs.resize(numSongs);
     
@@ -400,5 +404,3 @@ bool DataManager::loadData(const std::string& binaryPath,
     
     return true;
 }
-
-
