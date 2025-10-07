@@ -16,7 +16,7 @@
     do { \
         cudaError_t error = call; \
         if (error != cudaSuccess) { \
-            std::cerr << "CUDA error at " << _FILE_ << ":" << _LINE_ << " - " \
+            std::cerr << "CUDA error at " << __FILE__ << ":" << __LINE__ << " - " \
                       << cudaGetErrorString(error) << std::endl; \
             return false; \
         } \
@@ -30,7 +30,7 @@
     do { \
         cublasStatus_t status = call; \
         if (status != CUBLAS_STATUS_SUCCESS) { \
-            std::cerr << "cuBLAS error at " << _FILE_ << ":" << _LINE_ << " - Status: " << status << std::endl; \
+            std::cerr << "cuBLAS error at " << __FILE__ << ":" << __LINE__ << " - Status: " << status << std::endl; \
             if (status == CUBLAS_STATUS_NOT_INITIALIZED) std::cerr << "  CUBLAS_STATUS_NOT_INITIALIZED" << std::endl; \
             if (status == CUBLAS_STATUS_ALLOC_FAILED) std::cerr << "  CUBLAS_STATUS_ALLOC_FAILED" << std::endl; \
             if (status == CUBLAS_STATUS_INVALID_VALUE) std::cerr << "  CUBLAS_STATUS_INVALID_VALUE" << std::endl; \
