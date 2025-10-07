@@ -61,7 +61,7 @@ head -n 101 large_dataset.csv > test_dataset.csv
 ./recommender --song "Gen Z" -n 5
 ```
 
-## Notes
+## Note
 
 - Ensure there are no missing values in numerical columns
 - The preprocessor will skip invalid rows automatically
