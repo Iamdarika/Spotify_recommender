@@ -68,10 +68,11 @@ bool DataManager::isValidNumber(const std::string& str) {
     return end != str.c_str() && *end == '\0'; //at least some characters were converted and entire string was processed
 }
 
+// Parse a CSV line into fields
 std::vector<std::string> DataManager::parseCSVLine(const std::string& line) {
     std::vector<std::string> result;
     std::string current;
-    bool inQuotes = false;
+    bool inQuotes = false; //inQuotes → Tracks whether we are inside quotes.
     
     for (size_t i = 0; i < line.length(); ++i) {
         char c = line[i];
@@ -79,7 +80,7 @@ std::vector<std::string> DataManager::parseCSVLine(const std::string& line) {
         if (c == '"') {
             inQuotes = !inQuotes;
         } else if (c == ',' && !inQuotes) {
-            result.push_back(trim(current));
+            result.push_back(trim(current)); //Saves each field into the final vector
             current.clear();
         } else {
             current += c;
@@ -133,8 +134,8 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     // Read all lines from CSV
     std::vector<std::string> lines;
     std::string line;
-    while (std::getline(csvFile, line)) {
-        if (!line.empty()) {
+    while (std::getline(csvFile, line)) { //reads a single row of text (up to a newline \n)
+        if (!line.empty()) { //If the line is not empty, it adds it to the list of lines. 
             lines.push_back(line);
         }
     }
@@ -144,14 +145,14 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     
     // Create temporary storage for parsed songs
     std::vector<Song> songs(lines.size());
-    std::vector<bool> validSongs(lines.size(), false);
+    std::vector<bool> validSongs(lines.size(), false); //mark which songs are valid after parsing and normalization.
     std::map<std::string, int> genreToId;
     int nextGenreId = 0;
     
-    // Store raw feature values for normalization
+    // Store raw feature values for normalization , create 2d vec
     std::vector<std::vector<float>> rawFeatures(lines.size(), std::vector<float>(FEATURE_COUNT - 1, 0.0f));
     
-    // Feature column names (excluding genre which is categorical)
+    // Feature column names (excluding categorical genre)
     std::vector<std::string> featureCols = {
         "danceability", "energy", "key", "loudness", "mode", "speechiness",
         "acousticness", "instrumentalness", "liveness", "valence", "tempo"
@@ -162,7 +163,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     // Parse songs in parallel
     #pragma omp parallel
     {
-        std::map<std::string, int> localGenreMap;
+        std::map<std::string, int> localGenreMap; //Each thread gets its own private copy
         
         #pragma omp for schedule(dynamic, 1000)
         for (size_t i = 0; i < lines.size(); ++i) {
@@ -242,7 +243,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
                 // (we'll fix this after merging genre maps)
                 #pragma omp critical
                 {
-                    if (genreToId.find(genre) == genreToId.end()) {
+                    if (genreToId.find(genre) == genreToId.end()) { //It checks if the genre already has an assigned numeric ID. If not, assigns a new one and increments the counter.
                         genreToId[genre] = nextGenreId++;
                     }
                     songs[i].genre_id = genreToId[genre];
@@ -311,7 +312,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     std::cout << "Writing binary data to: " << outputPath << std::endl;
     
     // Write to binary file
-    std::ofstream outFile(outputPath, std::ios::binary);
+    std::ofstream outFile(outputPath, std::ios::binary); //Opens a file in binary mode
     if (!outFile.is_open()) {
         std::cerr << "Error: Could not create output file: " << outputPath << std::endl;
         return false;
@@ -325,19 +326,19 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     size_t numGenres = genreToId.size();
     outFile.write(reinterpret_cast<const char*>(&numGenres), sizeof(numGenres));
     
-    for (const auto& pair : genreToId) {
+    for (const auto& pair : genreToId) { //Loop over each genre in the map
         int genreId = pair.second;
         std::string genreName = pair.first;
         size_t len = genreName.size();
         
-        outFile.write(reinterpret_cast<const char*>(&genreId), sizeof(genreId));
-        outFile.write(reinterpret_cast<const char*>(&len), sizeof(len));
-        outFile.write(genreName.c_str(), len);
+        outFile.write(reinterpret_cast<const char*>(&genreId), sizeof(genreId)); //Writes the genre ID as binary.
+        outFile.write(reinterpret_cast<const char*>(&len), sizeof(len)); // Writes the length of the genre name
+        outFile.write(genreName.c_str(), len); //Writes the actual genre name characters.
     }
     
     // Write songs
     for (const auto& song : finalSongs) {
-        song.serialize(outFile);
+        song.serialize(outFile); //calls the serialize method of the Song class
     }
     
     outFile.close();
@@ -350,7 +351,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     for (const auto& pair : genreToId) {
         sortedGenres.push_back({pair.second, pair.first});
     }
-    std::sort(sortedGenres.begin(), sortedGenres.end());
+    std::sort(sortedGenres.begin(), sortedGenres.end()); //Sorts it by genre ID to display them in order.
     
     for (const auto& pair : sortedGenres) {
         std::cout << "  ID " << pair.first << ": " << pair.second << std::endl;
@@ -358,7 +359,7 @@ bool DataManager::preprocessData(const std::string& csvPath, const std::string& 
     
     return true;
 }
-
+// Load preprocessed data from binary file
 bool DataManager::loadData(const std::string& binaryPath, 
                           std::vector<Song>& songs,
                           std::map<int, std::string>& genreMap) {
@@ -383,11 +384,11 @@ bool DataManager::loadData(const std::string& binaryPath,
         int genreId;
         size_t len;
         
-        inFile.read(reinterpret_cast<char*>(&genreId), sizeof(genreId));
-        inFile.read(reinterpret_cast<char*>(&len), sizeof(len));
+        inFile.read(reinterpret_cast<char*>(&genreId), sizeof(genreId)); //Read genre ID.
+        inFile.read(reinterpret_cast<char*>(&len), sizeof(len)); //Read length of genre name string.
         
         std::string genreName(len, '\0');
-        inFile.read(&genreName[0], len);
+        inFile.read(&genreName[0], len); //Read the actual string characters into genreName
         
         genreMap[genreId] = genreName;
     }
@@ -397,11 +398,11 @@ bool DataManager::loadData(const std::string& binaryPath,
     songs.resize(numSongs);
     
     for (size_t i = 0; i < numSongs; ++i) {
-        songs[i].deserialize(inFile);
+        songs[i].deserialize(inFile); //Reconstructs the Song object in memory.
     }
     
     inFile.close();
-    
+    //Confirms how many songs and genres were successfully loaded.
     std::cout << "Loaded " << numSongs << " songs and " << numGenres << " genres." << std::endl;
     
     return true;
