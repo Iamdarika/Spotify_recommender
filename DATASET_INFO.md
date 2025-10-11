@@ -67,4 +67,4 @@ head -n 101 large_dataset.csv > test_dataset.csv
 - The preprocessor will skip invalid rows automatically
 - Genre names can be any string - they'll be encoded automatically
 - For best results, use at least 1000+ songs
-- The more data, the better the recommendations!
+- The more data, the better you the recommendations!
