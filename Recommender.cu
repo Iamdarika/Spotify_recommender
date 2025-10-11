@@ -148,6 +148,8 @@ bool Recommender::initialize(const std::vector<Song>& songs) {
         }
     }
 #endif
+     //checking if gpu enabled for clacutating nessary values for computing similarity
+
     if (gpuEnabled) {
         // Allocate GPU memory
         size_t featureMatrixSize = numSongs * FEATURE_COUNT * sizeof(float);
