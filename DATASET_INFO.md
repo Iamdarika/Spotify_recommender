@@ -1,6 +1,6 @@
 # Sample Dataset for Testing
 
-This is a template for my music dataset. 
+This is a template for our music dataset. 
 
 ## Required Columns
 
